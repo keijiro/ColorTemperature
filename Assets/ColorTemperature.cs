@@ -3,70 +3,84 @@ using System.Collections;
 
 public class ColorTemperature : MonoBehaviour
 {
-    //
-    // Converts a color temperature (Kelvin) to sRGB value.
-    //
-    // This implementation is based on a Tanner Helland's approximation.
-    // http://www.tannerhelland.com/4435/convert-temperature-rgb-algorithm-code/
-    //
-    // The coefficients have been slightly modified to get a continuous gradient,
-    // and therefore it shouldn't be considered as a scientifically accurate color
-    // temperature model.
-    //
-    static Color KelvinToColor(float k)
+    Texture2D texture;
+
+    static float Gamma_sRGB(float c)
     {
-        float r, g, b;
-
-        k *= 0.01f;
-
-        if (k < 66)
+        c = Mathf.Clamp01(c);
+        if (c <= 0.0031308f)
         {
-            r = 1;
-            g = 0.38855782260195315f * Mathf.Log(k) - 0.6279231240157355f;
-            if (k < 19)
-                b = 0;
-            else
-                b = 0.5410848875902343f * Mathf.Log(k - 10) - 1.1888850134384685f;
+            return 12.92f * c;
         }
         else
         {
-            r = Mathf.Pow(k - 60, -0.1332047592f) / 0.7876740722020901f;
-            g = Mathf.Pow(k - 60, -0.0755148492f) / 0.8734499527546277f;
-            b = 1;
+            var a = 0.055f;
+            return (1.0f + a) * Mathf.Pow(c, 1.0f / 2.4f) - a;
         }
-
-        return new Color(r, g, b);
     }
 
-    public float minTemp = 3000;
-    public float maxTemp = 13000;
+    static Color CIExy_To_sRGB(float x, float y)
+    {
+        var Y = 0.5f;
+        var X = Y * x / y;
+        var Z = Y * (1.0f - x - y) / y;
 
-    public GUIStyle minLabel;
-    public GUIStyle maxLabel;
+        var R = Gamma_sRGB( 3.2406f * X - 1.5372f * Y - 0.4986f * Z);
+        var G = Gamma_sRGB(-0.9689f * X + 1.8758f * Y + 0.0415f * Z);
+        var B = Gamma_sRGB( 0.0557f * X - 0.2040f * Y + 1.0570f * Z);
 
-    Texture2D texture;
+        return new Color(R, G, B);
+    }
+
+    static float GetY_StandardIlluminant(float x)
+    {
+        // An analytical model of chromaticity of the standard illuminant by Judd et al.
+        // http://en.wikipedia.org/wiki/Standard_illuminant#Illuminant_series_D
+        // Slightly modifed to adjust it with D65 white point (x=0.31271, y=0.32902).
+        return 2.87f * x - 3.0f * x * x - 0.27509507f;
+    }
 
     void Awake()
     {
-        texture = new Texture2D(512, 1);
+        texture = new Texture2D(512, 256);
         renderer.material.mainTexture = texture;
     }
 
-    void Update()
+    void Start()
     {
-        for (var x = 0; x < texture.width; x++)
+        for (var sy = 0; sy < texture.height; sy++)
         {
-            var k = 1.0f * x / texture.width;
-            var rgb = KelvinToColor(Mathf.Lerp(minTemp, maxTemp, k));
-            texture.SetPixel(x, 0, rgb);
+            for (var sx = 0; sx < texture.width; sx++)
+            {
+                var rx = 1.0f * sx / texture.width;
+                var ry = 2.0f * sy / texture.height;
+
+                var x = 0.31271f; // x value on the D65 white point.
+
+                if (rx < 0.5f)
+                    x += (rx - 0.5f) * 0.2f;
+                else
+                    x += (rx - 0.5f) * 0.4f;
+
+                var y = GetY_StandardIlluminant(x);
+
+                if (ry < 0.5f)
+                    y += (ry - 0.5f) * 0.2f;
+                else if (ry < 1.0f)
+                    y += (ry - 0.5f) * 0.4f;
+
+                texture.SetPixel(sx, sy, CIExy_To_sRGB(x, y));
+            }
         }
         texture.Apply();
     }
 
     void OnGUI()
     {
-        var rect = new Rect(0, 0, Screen.width, Screen.height);
-        GUI.Label(rect, "<- " + minTemp + " [K]", minLabel);
-        GUI.Label(rect, maxTemp + " [K] ->", maxLabel);
+        var sw = Screen.width;
+        var sh = Screen.height;
+        GUI.color = Color.black;
+        GUI.Label(new Rect(0, 0, sw, 100), "Color temperature curve with an approximation of the CIE standard illuminant.\nThe white point (D65) is placed at the center of screen.");
+        GUI.Label(new Rect(0, sh / 2, sw, 100), "Color temperature + tint (green-magenta).");
     }
 }

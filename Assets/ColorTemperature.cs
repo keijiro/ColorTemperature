@@ -52,22 +52,16 @@ public class ColorTemperature : MonoBehaviour
         {
             for (var sx = 0; sx < texture.width; sx++)
             {
-                var rx = 1.0f * sx / texture.width;
-                var ry = 2.0f * sy / texture.height;
+                var rx = 2.0f * sx / texture.width  - 1.0f;
+                var ry = 3.0f * sy / texture.height - 1.0f;
 
-                var x = 0.31271f; // x value on the D65 white point.
-
-                if (rx < 0.5f)
-                    x += (rx - 0.5f) * 0.2f;
-                else
-                    x += (rx - 0.5f) * 0.4f;
-
+                // 0.31271 = x value on the D65 white point.
+                var x = 0.31271f - (rx < 0.0f ? 0.15f : 0.1f) * rx;
                 var y = GetY_StandardIlluminant(x);
 
-                if (ry < 0.5f)
-                    y += (ry - 0.5f) * 0.2f;
-                else if (ry < 1.0f)
-                    y += (ry - 0.5f) * 0.4f;
+                // Apply the color tint.
+                if (ry < 1.0f)
+                    y += (ry < 0.0f ?  0.1f  :  0.2f) * ry;
 
                 texture.SetPixel(sx, sy, CIExy_To_sRGB(x, y));
             }
@@ -81,6 +75,6 @@ public class ColorTemperature : MonoBehaviour
         var sh = Screen.height;
         GUI.color = Color.black;
         GUI.Label(new Rect(0, 0, sw, 100), "Color temperature curve with an approximation of the CIE standard illuminant.\nThe white point (D65) is placed at the center of screen.");
-        GUI.Label(new Rect(0, sh / 2, sw, 100), "Color temperature + tint (green-magenta).");
+        GUI.Label(new Rect(0, sh / 3, sw, 100), "Color temperature + tint (magenta-green).");
     }
 }
